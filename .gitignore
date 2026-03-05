@@ -1,0 +1,31 @@
+# PlatformIO
+.pio/
+.pioenvs/
+.piolibdeps/
+
+# Build artifacts
+*.o
+*.a
+*.d
+*.elf
+*.bin
+*.hex
+*.map
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test binaries (native build)
+/test/build/
+
+# Secrets — never commit
+secrets.h
+credentials.h
