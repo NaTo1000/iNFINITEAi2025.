@@ -10,6 +10,20 @@ permissions:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: esp32dev clean rebuild
+            clean: pio run -e esp32dev -t clean
+            command: pio run -e esp32dev
+          - label: esp32dev_serial clean rebuild
+            clean: pio run -e esp32dev_serial -t clean
+            command: pio run -e esp32dev_serial
+          - label: native tests
+            clean: pio run -e native -t clean
+            command: pio test -e native
+    name: ${{ matrix.label }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -17,9 +31,7 @@ jobs:
           python-version: '3.x'
       - name: Install PlatformIO
         run: pip install platformio
-      - name: Build esp32dev
-        run: pio run -e esp32dev
-      - name: Build esp32dev_serial
-        run: pio run -e esp32dev_serial
-      - name: Run native tests
-        run: pio test -e native
+      - name: Clean previous artifacts
+        run: ${{ matrix.clean }}
+      - name: Run ${{ matrix.label }}
+        run: ${{ matrix.command }}

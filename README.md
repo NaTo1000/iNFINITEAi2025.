@@ -7,10 +7,10 @@ ESP32 control firmware that connects mobile/PC clients, MQTT/cloud services, and
 - ESP32 firmware entrypoint with Wi-Fi, MQTT, HTTPS, OTA, BLE, REST, UART, and procedure persistence modules.
 - Cloud AI integration for **structured JSON advice**, not local model inference.
 - A **safe procedure-generation loop** that validates allowlisted actions and saves approved procedures.
-- Native unit tests plus GitHub Actions CI that runs:
-  - `pio run -e esp32dev`
-  - `pio run -e esp32dev_serial`
-  - `pio test -e native`
+- Native unit tests plus GitHub Actions CI that runs full clean rebuilds/tests for:
+  - `pio run -e esp32dev -t clean && pio run -e esp32dev`
+  - `pio run -e esp32dev_serial -t clean && pio run -e esp32dev_serial`
+  - `pio run -e native -t clean && pio test -e native`
 
 ## Important safety model
 
@@ -63,9 +63,9 @@ If credentials are missing, the firmware falls back to provisioning/AP behavior 
 ### Local PlatformIO commands
 
 ```bash
-pio run -e esp32dev
-pio run -e esp32dev_serial
-pio test -e native
+pio run -e esp32dev -t clean && pio run -e esp32dev
+pio run -e esp32dev_serial -t clean && pio run -e esp32dev_serial
+pio run -e native -t clean && pio test -e native
 ```
 
 ### Native environment notes
