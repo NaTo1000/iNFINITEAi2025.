@@ -56,6 +56,7 @@ private:
     void _finishTask(bool passed, bool cancelled, const std::string& reason);
     void _appendLogLine(const std::string& line);
     void _publishResult(const InnovationResult& result);
+    std::string _buildAiContext(const std::string& feedback = {}) const;
     std::string _serializeProcedure(const AiProcedurePlan& procedure) const;
     std::string _buildValidationSummary(const AiProcedurePlan& procedure) const;
     uint32_t _nowMs() const;

@@ -25,11 +25,17 @@ void test_innovator_persists_validated_procedure() {
     FirmwareInnovator innovator(ai, cloud, store, sandbox);
     TEST_ASSERT_TRUE(store.begin());
     innovator.begin();
-    innovator.queueTask({"task1", "MQTT reconnect issue", "{}"});
+    innovator.queueTask({"task1", "MQTT reconnect issue", "{\"readings\":{\"pretaporp\":42},\"source\":\"bench\"}"});
     for (int i = 0; i < 6 && innovator.isBusy(); ++i) {
         innovator.tick();
     }
     TEST_ASSERT_EQUAL_UINT32(1, store.count());
+    const auto procedures = store.loadAll();
+    TEST_ASSERT_EQUAL_UINT32(1, procedures.size());
+    TEST_ASSERT_NOT_EQUAL(std::string::npos, procedures[0].code.find("\"taskContext\":{\"readings\":{\"pretaporp\":42},\"source\":\"bench\"}"));
+    TEST_ASSERT_EQUAL_UINT32(2, cloud.httpRequestBodies().size());
+    TEST_ASSERT_NOT_EQUAL(std::string::npos, cloud.httpRequestBodies()[0].find("pretaporp"));
+    TEST_ASSERT_NOT_EQUAL(std::string::npos, cloud.httpRequestBodies()[1].find("pretaporp"));
 }
 
 void test_innovator_rejects_invalid_procedure() {

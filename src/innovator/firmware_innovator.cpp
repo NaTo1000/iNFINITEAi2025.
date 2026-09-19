@@ -20,6 +20,17 @@
 #define ESP_LOGW(tag, fmt, ...) printf("[" tag "][WRN] " fmt "\n", ##__VA_ARGS__)
 #endif
 
+namespace {
+bool hasTaskReadings(const std::string& context) {
+    const size_t first = context.find_first_not_of(" \t\r\n");
+    if (first == std::string::npos) {
+        return false;
+    }
+    const size_t last = context.find_last_not_of(" \t\r\n");
+    return context.substr(first, last - first + 1U) != "{}";
+}
+} // namespace
+
 FirmwareInnovator::FirmwareInnovator(AiController& ai,
                                      CloudManager& cloud,
                                      ProcedureStore& store,
@@ -65,7 +76,8 @@ void FirmwareInnovator::tick() {
                     _finishTask(false, false, _diagnosis.reason.empty() ? "AI failed to propose a safe procedure" : _diagnosis.reason);
                     return;
                 }
-                _errorContext = _diagnosis.reason.empty() ? "AI returned an invalid proposal" : _diagnosis.reason;
+                _errorContext = _buildAiContext(
+                    _diagnosis.reason.empty() ? "AI returned an invalid proposal" : _diagnosis.reason);
                 _nextPhaseAfterMs = _nowMs() + INNOVATOR_CYCLE_DELAY_MS;
                 return;
             }
@@ -88,7 +100,7 @@ void FirmwareInnovator::tick() {
                     _finishTask(false, false, result.error);
                     return;
                 }
-                _errorContext = result.error;
+                _errorContext = _buildAiContext(result.error);
                 _phase = Phase::DIAGNOSE;
                 _nextPhaseAfterMs = _nowMs() + INNOVATOR_CYCLE_DELAY_MS;
                 return;
@@ -115,7 +127,7 @@ void FirmwareInnovator::tick() {
                 _finishTask(false, false, eval.reason.empty() ? "Evaluation failed" : eval.reason);
                 return;
             }
-            _errorContext = eval.reason.empty() ? eval.decision : eval.reason;
+            _errorContext = _buildAiContext(eval.reason.empty() ? eval.decision : eval.reason);
             _phase = Phase::DIAGNOSE;
             _nextPhaseAfterMs = _nowMs() + INNOVATOR_CYCLE_DELAY_MS;
             return;
@@ -129,7 +141,7 @@ void FirmwareInnovator::_startTask(const InnovationTask& task) {
     _currentTask = task;
     _currentResult = {};
     _currentResult.taskId = task.id;
-    _errorContext = task.description;
+    _errorContext = _buildAiContext();
     _phase = Phase::DIAGNOSE;
     _busy = true;
     _nextPhaseAfterMs = 0U;
@@ -177,6 +189,17 @@ void FirmwareInnovator::_publishResult(const InnovationResult& result) {
 #endif
 }
 
+std::string FirmwareInnovator::_buildAiContext(const std::string& feedback) const {
+    std::string context = _currentTask.description;
+    if (hasTaskReadings(_currentTask.context)) {
+        context += "\nReadings: " + _currentTask.context;
+    }
+    if (!feedback.empty()) {
+        context += "\nLatest feedback: " + feedback;
+    }
+    return context;
+}
+
 std::string FirmwareInnovator::_serializeProcedure(const AiProcedurePlan& procedure) const {
 #ifndef NATIVE_TEST
     JsonDocument doc;
@@ -192,6 +215,14 @@ std::string FirmwareInnovator::_serializeProcedure(const AiProcedurePlan& proced
     JsonArray validation = doc["validation"].to<JsonArray>();
     for (const std::string& rule : procedure.validation) {
         validation.add(rule.c_str());
+    }
+    if (hasTaskReadings(_currentTask.context)) {
+        JsonDocument taskContext;
+        if (!deserializeJson(taskContext, _currentTask.context.c_str()) && taskContext.is<JsonObject>()) {
+            doc["taskContext"] = taskContext.as<JsonObject>();
+        } else {
+            doc["taskContext"] = _currentTask.context.c_str();
+        }
     }
     std::string out;
     serializeJson(doc, out);
@@ -211,7 +242,15 @@ std::string FirmwareInnovator::_serializeProcedure(const AiProcedurePlan& proced
         if (i) out += ',';
         out += '"' + nativejson::escapeString(procedure.validation[i]) + '"';
     }
-    out += "]}";
+    out += "]";
+    if (hasTaskReadings(_currentTask.context)) {
+        if (nativejson::looksLikeJsonObject(_currentTask.context)) {
+            out += ",\"taskContext\":" + _currentTask.context;
+        } else {
+            out += ",\"taskContext\":\"" + nativejson::escapeString(_currentTask.context) + '"';
+        }
+    }
+    out += "}";
     return out;
 #endif
 }
@@ -224,6 +263,9 @@ std::string FirmwareInnovator::_buildValidationSummary(const AiProcedurePlan& pr
     summary += " Criteria:";
     for (const std::string& rule : procedure.validation) {
         summary += " " + rule + ";";
+    }
+    if (hasTaskReadings(_currentTask.context)) {
+        summary += " Readings/context: " + _currentTask.context;
     }
     return summary;
 }

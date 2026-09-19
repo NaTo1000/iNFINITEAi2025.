@@ -129,7 +129,7 @@ HttpResponse CloudManager::httpPost(const std::string& url,
 #ifdef NATIVE_TEST
     (void)url;
     (void)bearerToken;
-    (void)jsonBody;
+    _httpRequestBodies.push_back(jsonBody);
     if (_mockResponses.empty()) {
         response.error = "no mock HTTP response queued";
         return response;

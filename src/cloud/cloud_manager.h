@@ -57,6 +57,9 @@ public:
     const std::vector<std::pair<std::string, std::string>>& publishedMessages() const {
         return _publishedMessages;
     }
+    const std::vector<std::string>& httpRequestBodies() const {
+        return _httpRequestBodies;
+    }
 #endif
 
 private:
@@ -78,6 +81,7 @@ private:
     bool _mockMqttConnected = true;
     std::vector<HttpResponse> _mockResponses;
     std::vector<std::pair<std::string, std::string>> _publishedMessages;
+    std::vector<std::string> _httpRequestBodies;
 #else
     WiFiClientSecure  _wifiClient;
     PubSubClient      _mqtt;
