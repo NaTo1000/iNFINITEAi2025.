@@ -1,54 +1,55 @@
 #pragma once
 // =============================================================================
-// procedure_store.h — Persistent storage for innovation procedures
-//
-// Each innovation cycle that passes peak standards is saved as a named
-// "procedure" with a randomly generated funny name (e.g. "SneezyNoodleV42").
-// Stored in ESP32 NVS (non-volatile storage) and also written to SPIFFS JSON.
+// procedure_store.h — Persistent storage for validated procedures
 // =============================================================================
 #include <string>
 #include <vector>
 #include "../config.h"
 
 struct Procedure {
-    std::string name;        // funny auto-generated name
-    std::string description; // what the innovation does
-    std::string code;        // the validated code/config snippet
-    std::string timestamp;   // ISO-8601 creation time
-    uint32_t    iteration;   // which innovator iteration produced it
+    std::string name;
+    std::string description;
+    std::string code;
+    std::string timestamp;
+    uint32_t    iteration = 0;
 };
 
 class ProcedureStore {
 public:
+#ifdef NATIVE_TEST
+    explicit ProcedureStore(std::string rootDir = "/tmp/infiniteai-procedures");
+#else
     ProcedureStore();
+#endif
 
     bool begin();
-
-    // Save a new procedure (generates a funny name automatically)
     bool save(const std::string& description,
               const std::string& code,
               uint32_t iteration);
-
-    // Load all stored procedures
     std::vector<Procedure> loadAll() const;
-
-    // Load a single procedure by name
     bool loadByName(const std::string& name, Procedure& out) const;
-
-    // Serialise procedure list to JSON string
     std::string toJson() const;
-
-    // Count of stored procedures
     size_t count() const;
-
-    // Funny-name generator (public so it can be unit-tested)
     static std::string generateFunnyName(uint32_t seed);
+
+#ifdef NATIVE_TEST
+    bool corruptIndexForTest(const std::string& rawContents);
+#endif
 
 private:
     bool _persist(const Procedure& p);
+    bool _writeIndex(const std::vector<std::string>& names) const;
+    std::vector<std::string> _loadIndexNames() const;
+    std::vector<std::string> _scanProcedureNames() const;
     std::string _indexPath() const;
     std::string _procedurePath(const std::string& name) const;
+    std::string _tempPath(const std::string& path) const;
     std::string _currentTimestamp() const;
+    std::string _sanitizeName(const std::string& rawName) const;
+    bool _hasFreeSpaceFor(size_t bytes) const;
 
     std::vector<Procedure> _cache;
+#ifdef NATIVE_TEST
+    std::string _rootDir;
+#endif
 };

@@ -27,5 +27,6 @@ Thumbs.db
 /test/build/
 
 # Secrets — never commit
+src/config_secrets.h
 secrets.h
 credentials.h

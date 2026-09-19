@@ -1,54 +1,72 @@
 #pragma once
 // =============================================================================
-// ai_controller.h — On-board AI control module
-//
-// Responsibilities:
-//  • Build prompts from sensor/error context
-//  • Call the cloud LLM via CloudManager::httpPost
-//  • Parse the JSON response and extract an action or solution
-//  • Notify subscribers of the AI decision
+// ai_controller.h — Cloud AI control module
 // =============================================================================
-#include <string>
+#include <cstdint>
 #include <functional>
+#include <string>
+#include <vector>
 #include "../config.h"
 
-// Forward declaration to avoid circular dependency
 class CloudManager;
 
-// Callback fired when the AI produces a decision/action string
 using AiDecisionCallback = std::function<void(const std::string& decision)>;
 
+enum class AiVerdict : uint8_t {
+    NONE = 0,
+    PROPOSE,
+    PASS,
+    FAIL,
+    ERROR,
+};
+
+struct AiProcedureStep {
+    std::string action;
+    std::string value;
+    uint32_t    valueNumber = 0;
+};
+
+struct AiProcedurePlan {
+    std::string title;
+    std::string summary;
+    std::vector<AiProcedureStep> steps;
+    std::vector<std::string> validation;
+};
+
 struct AiRequest {
-    std::string context;    // e.g. error message or task description
-    std::string systemRole; // system prompt
+    std::string context;
+    std::string systemRole;
 };
 
 struct AiResponse {
-    bool        success  = false;
-    std::string decision;   // extracted action text
-    std::string raw;        // full raw JSON from API
+    bool            success  = false;
+    AiVerdict       verdict  = AiVerdict::NONE;
+    std::string     decision;
+    std::string     reason;
+    std::string     raw;
+    AiProcedurePlan procedure;
 };
 
 class AiController {
 public:
     explicit AiController(CloudManager& cloud);
 
-    // Synchronous query — blocks until HTTP response (use in task context)
     AiResponse query(const AiRequest& req);
-
-    // Register callback for decisions
     void onDecision(AiDecisionCallback cb) { _decisionCb = cb; }
-
-    // Convenience: ask AI to diagnose an error and suggest a fix
     AiResponse diagnose(const std::string& errorDescription);
-
-    // Convenience: ask AI to evaluate an innovation result
     AiResponse evaluate(const std::string& testResult);
+
+#ifdef NATIVE_TEST
+    static AiResponse parseStructuredDecisionForTest(const std::string& content);
+#endif
 
 private:
     std::string _buildPayload(const AiRequest& req) const;
     std::string _extractContent(const std::string& rawJson) const;
+    AiResponse  _parseStructuredDecision(const std::string& content) const;
+    bool        _sanitizeProcedure(AiProcedurePlan& procedure, std::string& reason) const;
+    static AiVerdict _parseVerdict(const std::string& verdictText);
 
-    CloudManager&    _cloud;
-    AiDecisionCallback _decisionCb;
+    CloudManager&       _cloud;
+    AiDecisionCallback  _decisionCb;
 };

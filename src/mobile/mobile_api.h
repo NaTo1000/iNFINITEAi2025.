@@ -1,55 +1,82 @@
 #pragma once
 // =============================================================================
 // mobile_api.h — HTTP REST + BLE interface for mobile app and PC
-//
-// Exposes:
-//   GET  /status        — device health and last AI decision
-//   POST /command       — send a command (JSON body)
-//   GET  /procedures    — list saved innovation procedures
-//   POST /innovate      — trigger an innovator cycle
-//   GET  /innovate/log  — retrieve innovator log
-//   POST /ai/query      — direct AI query
-//
-// All endpoints require "Authorization: Bearer <API_AUTH_TOKEN>" header.
-// BLE GATT characteristic mirrors the /command endpoint.
 // =============================================================================
-#include <string>
+#include <cstddef>
+#include <cstdint>
 #include <functional>
+#include <map>
+#include <string>
+#include <vector>
 #include "../config.h"
 
-// Forward declarations
 class CloudManager;
 class AiController;
 class FlipperBridge;
+class ProcedureStore;
+class FirmwareInnovator;
 
 using ApiCommandCallback = std::function<void(const std::string& jsonCommand)>;
 
 class MobileApi {
 public:
-    MobileApi(CloudManager& cloud, AiController& ai, FlipperBridge& flipper);
+    MobileApi(CloudManager& cloud,
+              AiController& ai,
+              FlipperBridge& flipper,
+              ProcedureStore& store,
+              FirmwareInnovator& innovator);
 
     bool begin();
     void loop();
-
-    // Register handler for commands arriving via REST or BLE
     void onCommand(ApiCommandCallback cb) { _cmdCb = cb; }
-
-    // Send a notification via BLE (e.g. AI result or status update)
     void notifyBle(const std::string& json);
+    void _onBleWrite(const std::string& data);
+
+#ifdef NATIVE_TEST
+    bool authenticateForTest(const std::string& authHeader) const { return _authenticate(authHeader); }
+    struct BodyChunkResult {
+        bool accepted = false;
+        bool complete = false;
+        std::string body;
+        std::string error;
+    };
+    BodyChunkResult accumulateBodyChunkForTest(const std::string& requestId,
+                                               const std::string& chunk,
+                                               size_t index,
+                                               size_t total);
+#endif
 
 private:
+    struct BufferedRequest {
+        std::string data;
+        size_t      total = 0;
+    };
+
     void _setupRoutes();
     bool _authenticate(const std::string& authHeader) const;
+    bool _rateLimitOk();
     void _setupBle();
-    void _onBleWrite(const std::string& data);
+    std::string _requestKey(const void* request) const;
+    bool _appendBodyChunk(const std::string& requestKey,
+                          const uint8_t* data,
+                          size_t len,
+                          size_t index,
+                          size_t total,
+                          std::string& completeBody,
+                          std::string& error);
+    void _clearRequestBuffer(const std::string& requestKey);
+    uint32_t _nowMs() const;
 
     CloudManager&  _cloud;
     AiController&  _ai;
     FlipperBridge& _flipper;
+    ProcedureStore& _store;
+    FirmwareInnovator& _innovator;
     ApiCommandCallback _cmdCb;
+    std::map<std::string, BufferedRequest> _requestBuffers;
+    std::vector<uint32_t> _recentCallTimes;
 
 #ifndef NATIVE_TEST
-    // Defined in .cpp to avoid including AsyncWebServer in header (large dep)
     void* _server = nullptr;
     void* _bleChar = nullptr;
 #endif
