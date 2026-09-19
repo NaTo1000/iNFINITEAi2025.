@@ -1,20 +1,13 @@
 #pragma once
 // =============================================================================
-// flipper_bridge.h — Flipper Zero integration (UART + BLE)
-//
-// The Flipper Zero acts as the physical action interface:
-//  • Receives command packets from the ESP32 and executes NFC/RF/GPIO actions
-//  • Sends event/result packets back to the ESP32
-//  • Also reachable over BLE for wireless proximity control
+// flipper_bridge.h — Flipper Zero UART bridge with validation and ACK handling
 // =============================================================================
-#include <string>
+#include <cstdint>
 #include <functional>
+#include <string>
+#include <vector>
 #include "../config.h"
 
-// Forward declarations
-class CloudManager;
-
-// Packet types exchanged with Flipper Zero
 enum class FlipperCmd : uint8_t {
     PING          = 0x01,
     NFC_EMULATE   = 0x10,
@@ -27,8 +20,8 @@ enum class FlipperCmd : uint8_t {
 };
 
 struct FlipperPacket {
-    FlipperCmd  cmd;
-    std::string payload;  // JSON or raw hex data
+    FlipperCmd  cmd = FlipperCmd::PING;
+    std::string payload;
 };
 
 using FlipperEventCallback = std::function<void(const FlipperPacket& pkt)>;
@@ -39,29 +32,41 @@ public:
 
     bool begin();
     void loop();
-
-    // Send a command to the Flipper Zero
     bool send(const FlipperPacket& pkt);
 
-    // Convenience senders
     bool ping();
     bool nfcEmulate(const std::string& uidHex);
-    bool rfTransmit(const std::string& dataHex, uint32_t freq_hz = 433920000);
+    bool rfTransmit(const std::string& dataHex, uint32_t freq_hz = 433920000U);
     bool gpioSet(uint8_t pin, bool state);
     bool irTransmit(const std::string& irSignalHex);
     bool sendCustom(const std::string& jsonPayload);
 
-    // Register callback for events coming FROM the Flipper
     void onEvent(FlipperEventCallback cb) { _eventCb = cb; }
-
     bool isConnected() const { return _connected; }
+    const std::string& lastError() const { return _lastError; }
+
+#ifdef NATIVE_TEST
+    void injectIncomingLineForTest(const std::string& line);
+    std::string lastTxForTest() const { return _lastTx; }
+    bool processIncomingForTest(const std::string& line);
+#endif
 
 private:
-    bool          _connected = false;
+    bool _connected = false;
+    bool _awaitingAck = false;
     FlipperEventCallback _eventCb;
-    std::string   _rxBuffer;
+    std::string _rxBuffer;
+    std::string _lastError;
+#ifdef NATIVE_TEST
+    std::vector<std::string> _pendingIncoming;
+    std::string _lastTx;
+#endif
 
-    void _processIncoming(const std::string& line);
+    bool _awaitAck();
+    bool _validatePacket(const FlipperPacket& pkt);
+    bool _isHexPayload(const std::string& value) const;
+    bool _isDangerousCommand(FlipperCmd cmd) const;
+    bool _processIncoming(const std::string& line);
     std::string _packetToJson(const FlipperPacket& pkt) const;
     FlipperPacket _jsonToPacket(const std::string& json) const;
 };

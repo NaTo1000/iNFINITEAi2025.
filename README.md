@@ -1,229 +1,200 @@
 # iNFINITEAi2025
 
-> **ESP32 commander and integrations program** — Cloud-connected, AI-controlled,  
-> Flipper Zero + Mobile integrated firmware with an on-board self-healing & self-improving engine.
+ESP32 control firmware that connects mobile/PC clients, MQTT/cloud services, and a Flipper Zero bridge.
 
----
+## What this repository now implements
 
-## ✨ Feature Overview
+- ESP32 firmware entrypoint with Wi-Fi, MQTT, HTTPS, OTA, BLE, REST, UART, and procedure persistence modules.
+- Cloud AI integration for **structured JSON advice**, not local model inference.
+- A **safe procedure-generation loop** that validates allowlisted actions and saves approved procedures.
+- Native unit tests plus GitHub Actions CI that runs:
+  - `pio run -e esp32dev`
+  - `pio run -e esp32dev_serial`
+  - `pio test -e native`
 
-| Module | Description |
-|---|---|
-| **CloudManager** | WiFi (STA + fallback AP), TLS MQTT, HTTPS REST, OTA firmware updates |
-| **AiController** | Calls a cloud LLM (OpenAI-compatible) for decisions, diagnosis, and evaluation |
-| **FlipperBridge** | UART + BLE communication with a Flipper Zero (NFC, RF, GPIO, IR, custom commands) |
-| **MobileApi** | Async HTTP REST server + BLE GATT server for mobile app and PC control |
-| **FirmwareInnovator** | Self-healing loop: AI diagnose → Sandbox test → AI evaluate → iterate until PASS |
-| **Sandbox** | Heap-guarded, exception-safe execution environment for testing innovations |
-| **ProcedureStore** | Persists validated innovations to SPIFFS with auto-generated **funny names** |
+## Important safety model
 
----
+This project does **not** compile or execute arbitrary AI-generated C++ on-device.
 
-## 🏗 Architecture
+Instead, the innovator requests a structured JSON procedure containing only allowlisted actions:
 
-```
-Mobile / PC / Cloud Server
-        │  (HTTP REST · BLE · MQTT)
-        ▼
-┌───────────────────────────────────────────────────────────┐
-│                    ESP32 iNFINITEAi2025                   │
-│                                                           │
-│  CloudManager  ◄──► MQTT broker / cloud REST services    │
-│  AiController  ◄──► LLM API (OpenAI-compatible)          │
-│  MobileApi     ◄──► Mobile app / PC (HTTP + BLE GATT)    │
-│  FlipperBridge ◄──► Flipper Zero (UART on GPIO 16/17)    │
-│                                                           │
-│  FirmwareInnovator (self-improvement loop)                │
-│    ├── Sandbox         (safe test execution)              │
-│    └── ProcedureStore  (funny-named innovation archive)   │
-└───────────────────────────────────────────────────────────┘
-        │  (UART · BLE)
-        ▼
-   Flipper Zero  ──► NFC / RF / GPIO / IR physical actions
+- `log`
+- `publish_status`
+- `wait_ms`
+- `request_review`
+
+A procedure must also include explicit validation criteria before it can be persisted. This means the current firmware supports **safe procedure generation and archival**, not autonomous firmware self-modification.
+
+## Repository layout
+
+```text
+src/
+  ai/           Structured AI request/response handling
+  cloud/        Wi-Fi, MQTT, HTTPS, OTA
+  common/       Native test helpers
+  flipper/      UART bridge and packet validation
+  innovator/    Sandbox + bounded innovation state machine
+  mobile/       REST + BLE command surface
+  procedures/   Persistent validated procedure storage
+  main.cpp      ESP32 setup()/loop()
 ```
 
----
+## Configuration and secrets
 
-## 🤖 Firmware Innovator — Self-Healing Loop
+Tracked source only contains defaults and limits. Real credentials must go in an ignored file:
 
-The on-board innovator continuously improves the firmware without human intervention:
+1. Copy `/home/runner/work/iNFINITEAi2025./iNFINITEAi2025./src/config_secrets.example.h`
+2. Save it as `/home/runner/work/iNFINITEAi2025./iNFINITEAi2025./src/config_secrets.h`
+3. Fill in real values for Wi-Fi, MQTT, AI, API, TLS CA, and OTA auth.
 
+`src/config_secrets.h` is gitignored.
+
+### Required secure configuration
+
+- `TLS_ROOT_CA` must be set for HTTPS and TLS MQTT.
+- `API_AUTH_TOKEN` must be a non-default bearer token.
+- `MQTT_COMMAND_TOKEN` must be set for authenticated MQTT control messages.
+- `OTA_PASSWORD_HASH` must be set before OTA is enabled.
+
+If credentials are missing, the firmware falls back to provisioning/AP behavior or disables the affected feature instead of using insecure defaults.
+
+## Build and test
+
+### Local PlatformIO commands
+
+```bash
+pio run -e esp32dev
+pio run -e esp32dev_serial
+pio test -e native
 ```
-Error / task arrives (via MQTT, REST, or watchdog)
-        │
-        ▼
-  [1] AI diagnoses error → proposes solution code
-        │
-        ▼
-  [2] Sandbox executes solution (heap-guarded, exception-safe)
-        │
-        ▼
-  [3] AI evaluates sandbox output
-        │
-    PASS? ──YES──► Save procedure with funny name (e.g. "SneezyCrumpetV7")
-        │                  │
-        NO                 └──► Publish to MQTT + notify mobile via BLE
-        │
-        └──► Feed evaluation back as new error context → repeat (max 50 iter)
+
+### Native environment notes
+
+The native test environment uses repository-relative headers through `-Isrc` and `test_build_src = yes`, so tests include headers like:
+
+```cpp
+#include "ai/ai_controller.h"
 ```
 
-Saved procedures are stored in SPIFFS at `/proc/<FunnyName>.json` and indexed at `/proc/index.json`.
+## REST API
 
----
+All HTTP endpoints require:
 
-## 🎮 Control Interfaces
+```text
+Authorization: ******
+```
 
-### Mobile / PC — REST API
+### Endpoints
 
-All endpoints require `Authorization: Bearer <API_AUTH_TOKEN>`.
-
-| Method | Endpoint | Description |
+| Method | Path | Purpose |
 |---|---|---|
-| `GET` | `/status` | Device health, connectivity, Flipper status |
-| `POST` | `/command` | Send a command JSON (see below) |
-| `POST` | `/ai/query` | Direct AI query with custom context |
-| `GET` | `/procedures` | List saved innovation procedures |
-| `POST` | `/innovate` | Trigger an innovation cycle |
+| `GET` | `/status` | Connectivity and device status |
+| `POST` | `/command` | Queue a validated control command |
+| `POST` | `/ai/query` | Send a direct structured AI request |
+| `GET` | `/procedures` | List saved validated procedures |
+| `POST` | `/innovate` | Queue a new innovation task |
+| `GET` | `/innovate/log` | Retrieve the bounded innovation log |
 
-### MQTT Topics
+### Request constraints
 
-| Topic | Direction | Description |
-|---|---|---|
-| `infiniteai/cmd` | ← subscribe | Commands from cloud/server |
-| `infiniteai/status` | → publish | Device status and ping replies |
-| `infiniteai/ai` | → publish | AI decision results |
-| `infiniteai/innovator` | → publish | Innovation cycle results |
+- JSON body required for POST routes
+- request body limit: `API_MAX_BODY_BYTES`
+- fragmented request bodies are reassembled using `index`/`total`
+- malformed or oversized bodies return structured errors
+- requests are rate limited
 
-### Command JSON Format
+### Dangerous commands
+
+Dangerous commands such as `reboot` and physical Flipper actions require:
+
+- prior API authentication
+- `confirm: true`
+- for MQTT, an `auth` token and a fresh `nonce`
+
+## BLE
+
+BLE mirrors the command surface for nearby controllers.
+
+- pairing/authentication is enabled where supported by NimBLE
+- BLE writes must include an `auth` field matching `API_AUTH_TOKEN`
+- BLE is intended for trusted local clients; platform-specific bonding limitations should still be validated on hardware
+
+## MQTT and cloud behavior
+
+- MQTT payloads are size-limited.
+- Malformed MQTT command payloads are rejected.
+- HTTPS requests use explicit timeouts, retries, response-size limits, and HTTP status handling.
+- Sensitive values such as bearer tokens and API keys are not logged.
+
+For authenticated MQTT control, use JSON shaped like:
 
 ```json
-{ "action": "ping" }
-{ "action": "innovate", "description": "WiFi reconnect is slow" }
-{ "action": "flipper",  "cmd": 16, "payload": { "uid": "DEADBEEF" } }
-{ "action": "ai_query", "context": "How do I reduce heap fragmentation?" }
-{ "action": "procedures" }
-{ "action": "reboot" }
+{
+  "action": "innovate",
+  "description": "WiFi reconnect is slow",
+  "auth": "<MQTT_COMMAND_TOKEN>",
+  "nonce": "unique-command-id",
+  "ts": 1735689600000
+}
 ```
 
-### BLE GATT
+## Flipper Zero bridge
 
-- **Service UUID**: `12345678-1234-1234-1234-1234567890AB`
-- **Command characteristic** (write): `...90AC` — same JSON format as REST `/command`
-- **Response characteristic** (notify): `...90AD` — AI results and status updates
+Packets are newline-delimited JSON:
 
-### Flipper Zero (UART)
-
-Wire Flipper TX → ESP32 GPIO 16, Flipper RX → ESP32 GPIO 17.  
-Packets are newline-delimited JSON: `{"cmd":<uint8>,"payload":<json>}`.
-
----
-
-## ⚙️ Hardware Setup
-
-| Signal | ESP32 Pin | Connected To |
-|---|---|---|
-| Flipper RX data | GPIO 16 | Flipper Zero TX |
-| Flipper TX data | GPIO 17 | Flipper Zero RX |
-| GND | GND | Flipper Zero GND |
-
----
-
-## 🚀 Getting Started
-
-### Prerequisites
-
-- [PlatformIO](https://platformio.org/) (VS Code extension or CLI)
-- ESP32 DevKit board
-- Flipper Zero (optional, for physical RF/NFC actions)
-
-### 1. Configure
-
-Edit `src/config.h` and set:
-- `WIFI_SSID` / `WIFI_PASSWORD`
-- `MQTT_BROKER` / `MQTT_USER` / `MQTT_PASSWORD`
-- `AI_API_URL` / `AI_API_KEY`
-- `API_AUTH_TOKEN`
-
-### 2. Build and Flash
-
-```bash
-# Serial upload
-pio run -e esp32dev_serial --target upload
-
-# OTA upload (device must already be running and on the same network)
-pio run -e esp32dev --target upload
+```json
+{
+  "cmd": 16,
+  "payload": {
+    "uid": "DEADBEEF"
+  }
+}
 ```
 
-### 3. Monitor
+Implemented protections:
 
-```bash
-pio device monitor --baud 115200
-```
+- ping/ACK connectivity check
+- maximum packet size
+- malformed frame rejection
+- nested JSON payload encoding
+- validation for GPIO pin, RF frequency, and hex payloads
 
-### 4. Run Native Unit Tests
+Physical NFC/RF/GPIO/IR actions can have legal or safety consequences. Only use them with explicit authorization and local confirmation.
 
-Download [Unity](https://github.com/ThrowTheSwitch/Unity) (`unity.h`, `unity_internals.h`, `unity.c`) into a local directory, then:
+## Procedure persistence
 
-```bash
-UNITY=/path/to/unity/src   # e.g. ~/.pio/packages/framework-unity/src
-REPO=/path/to/iNFINITEAi2025.
+Validated procedures are stored atomically and indexed under the procedure store.
 
-g++ -DNATIVE_TEST -std=c++17 -I$UNITY -I$REPO/src \
-    $REPO/test/unit/test_procedure_store.cpp $UNITY/unity.c \
-    -o /tmp/test_proc && /tmp/test_proc
+Implemented safeguards:
 
-g++ -DNATIVE_TEST -std=c++17 -I$UNITY -I$REPO/src \
-    $REPO/test/unit/test_sandbox.cpp $UNITY/unity.c \
-    -o /tmp/test_sb && /tmp/test_sb
+- atomic temp-file write + rename
+- index rebuild by scanning stored procedures
+- corruption fallback
+- procedure size/count limits
+- free-space checks
+- sanitized unique filenames
 
-g++ -DNATIVE_TEST -std=c++17 -I$UNITY -I$REPO/src \
-    $REPO/test/unit/test_flipper_bridge.cpp $UNITY/unity.c \
-    -o /tmp/test_flip && /tmp/test_flip
-```
+## OTA
 
-Expected output: `17 Tests 0 Failures 0 Ignored — OK`
+OTA is disabled unless `OTA_PASSWORD_HASH` is configured.
 
----
+Current limitations:
 
-## 📁 Project Structure
+- authenticated OTA is supported
+- secure rollback/signature infrastructure is **not** implemented in this repository
+- deploy only in environments where your OTA transport and release pipeline are already trusted
 
-```
-iNFINITEAi2025/
-├── platformio.ini                  # PlatformIO build config
-├── src/
-│   ├── main.cpp                    # ESP32 setup() / loop()
-│   ├── config.h                    # All configurable constants
-│   ├── cloud/
-│   │   ├── cloud_manager.h/.cpp    # WiFi + MQTT + REST + OTA
-│   ├── ai/
-│   │   ├── ai_controller.h/.cpp    # LLM query, diagnose, evaluate
-│   ├── flipper/
-│   │   ├── flipper_bridge.h/.cpp   # Flipper Zero UART bridge
-│   ├── mobile/
-│   │   ├── mobile_api.h/.cpp       # HTTP REST + BLE GATT server
-│   ├── innovator/
-│   │   ├── firmware_innovator.h/.cpp  # Self-healing innovation loop
-│   │   ├── sandbox.h/.cpp             # Heap-safe test execution
-│   └── procedures/
-│       ├── procedure_store.h/.cpp  # SPIFFS procedure persistence
-└── test/
-    └── unit/
-        ├── test_procedure_store.cpp
-        ├── test_sandbox.cpp
-        └── test_flipper_bridge.cpp
-```
+## Hardware and integration testing guidance
 
----
+Native tests cover parser, persistence, Flipper framing, mobile body buffering, and innovation state transitions.
 
-## 🔐 Security Notes
+Hardware-specific behavior still needs on-device verification for:
 
-- REST API uses Bearer token authentication on every endpoint.
-- Credentials (`WIFI_PASSWORD`, `MQTT_PASSWORD`, `AI_API_KEY`, `API_AUTH_TOKEN`) must be changed from defaults before deployment.
-- MQTT uses TLS (port 8883) — configure your broker certificate accordingly.
-- The Sandbox caps heap usage to prevent innovation cycles from crashing the device.
+- Wi-Fi association and provisioning AP
+- TLS MQTT connectivity with your broker CA
+- HTTPS AI provider compatibility
+- BLE pairing/bonding behavior on your target client devices
+- OTA updates on your selected partition scheme
+- UART connectivity to a real Flipper Zero
 
----
-
-## 📜 License
-
-MIT
+Where hardware is unavailable, the modules expose native-safe code paths or mocks so command handling, persistence, and AI/procedure logic can still be exercised in CI.

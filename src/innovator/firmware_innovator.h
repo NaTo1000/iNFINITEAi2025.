@@ -1,76 +1,64 @@
 #pragma once
 // =============================================================================
-// firmware_innovator.h — On-board self-healing and self-improving engine
-//
-// Workflow per innovation cycle:
-//  1. Receive an error report (from watchdog, MQTT, or mobile API)
-//  2. Call AiController::diagnose() to get a proposed solution
-//  3. Run the solution in the Sandbox
-//  4. Call AiController::evaluate() on the sandbox output
-//  5. If AI says PASS  → save procedure via ProcedureStore (funny name)
-//     If AI says FAIL  → iterate (max INNOVATOR_MAX_ITERATIONS)
-//  6. Publish result to MQTT and notify mobile via BLE
-//  7. Start the next innovation task automatically
+// firmware_innovator.h — Safe, bounded procedure generation loop
 // =============================================================================
-#include <string>
-#include <functional>
 #include <cstdint>
+#include <functional>
+#include <string>
 #include "../config.h"
+#include "../ai/ai_controller.h"
 
-// Forward declarations
-class AiController;
 class CloudManager;
 class ProcedureStore;
 class Sandbox;
 
-// A task to be innovated: a description of what went wrong / what to improve
 struct InnovationTask {
-    std::string id;           // unique task ID
-    std::string description;  // error or improvement description
-    std::string context;      // additional JSON context
+    std::string id;
+    std::string description;
+    std::string context;
 };
 
-// Innovation cycle result
 struct InnovationResult {
     std::string taskId;
     bool        passed        = false;
+    bool        cancelled     = false;
     uint32_t    iterations    = 0;
-    std::string procedureName; // funny name (only set on success)
+    std::string procedureName;
     std::string finalSolution;
-    std::string log;           // human-readable cycle log
+    std::string log;
 };
 
-using InnovationCompleteCallback =
-    std::function<void(const InnovationResult& result)>;
+using InnovationCompleteCallback = std::function<void(const InnovationResult& result)>;
 
 class FirmwareInnovator {
 public:
-    FirmwareInnovator(AiController&   ai,
-                      CloudManager&   cloud,
+    FirmwareInnovator(AiController& ai,
+                      CloudManager& cloud,
                       ProcedureStore& store,
-                      Sandbox&        sandbox);
+                      Sandbox& sandbox);
 
     void begin();
-
-    // Queue a new innovation task (can be called from any context)
     void queueTask(const InnovationTask& task);
-
-    // Process one pending task (call from main loop — non-blocking iteration)
     void tick();
-
-    // Register completion callback
     void onComplete(InnovationCompleteCallback cb) { _completeCb = cb; }
-
-    // Returns true if the innovator is currently running a task
     bool isBusy() const { return _busy; }
-
-    // Returns log of all completed innovations
     const std::string& getLog() const { return _log; }
 
 private:
-    bool    _runCycle(const InnovationTask& task, InnovationResult& result);
-    void    _publishResult(const InnovationResult& result);
-    std::string _buildSandboxTest(const std::string& aiSolution) const;
+    enum class Phase : uint8_t {
+        IDLE = 0,
+        DIAGNOSE,
+        VALIDATE,
+        EVALUATE,
+    };
+
+    void _startTask(const InnovationTask& task);
+    void _finishTask(bool passed, bool cancelled, const std::string& reason);
+    void _appendLogLine(const std::string& line);
+    void _publishResult(const InnovationResult& result);
+    std::string _serializeProcedure(const AiProcedurePlan& procedure) const;
+    std::string _buildValidationSummary(const AiProcedurePlan& procedure) const;
+    uint32_t _nowMs() const;
 
     AiController&   _ai;
     CloudManager&   _cloud;
@@ -78,10 +66,15 @@ private:
     Sandbox&        _sandbox;
 
     InnovationCompleteCallback _completeCb;
-
     InnovationTask    _currentTask;
-    bool              _busy          = false;
-    bool              _taskPending   = false;
+    InnovationTask    _replacementTask;
+    InnovationResult  _currentResult;
+    AiResponse        _diagnosis;
+    std::string       _errorContext;
+    std::string       _sandboxSummary;
     std::string       _log;
-    uint32_t          _taskCounter   = 0;
+    Phase             _phase = Phase::IDLE;
+    bool              _busy = false;
+    bool              _hasReplacement = false;
+    uint32_t          _nextPhaseAfterMs = 0;
 };

@@ -1,58 +1,48 @@
-// =============================================================================
-// test_flipper_bridge.cpp — Unit tests for FlipperBridge packet helpers
-// =============================================================================
-#define NATIVE_TEST
 #include <unity.h>
 #include <string>
+
+#include "flipper/flipper_bridge.h"
 
 void setUp(void) {}
 void tearDown(void) {}
 
-#include "../src/flipper/flipper_bridge.h"
-#include "../src/flipper/flipper_bridge.cpp"
-
-// ---------------------------------------------------------------------------
-void test_ping_sends_without_crash() {
+void test_begin_requires_ack() {
     FlipperBridge fb;
-    // In native mode, send() just prints; verify it returns true
-    TEST_ASSERT_TRUE(fb.ping());
-}
-
-void test_nfc_emulate_sends() {
-    FlipperBridge fb;
-    TEST_ASSERT_TRUE(fb.nfcEmulate("DEADBEEF"));
-}
-
-void test_gpio_set_true() {
-    FlipperBridge fb;
-    TEST_ASSERT_TRUE(fb.gpioSet(5, true));
-}
-
-void test_gpio_set_false() {
-    FlipperBridge fb;
-    TEST_ASSERT_TRUE(fb.gpioSet(5, false));
-}
-
-void test_custom_send() {
-    FlipperBridge fb;
-    TEST_ASSERT_TRUE(fb.sendCustom("{\"test\":1}"));
-}
-
-void test_not_connected_initially() {
-    FlipperBridge fb;
-    // No ACK received → not connected
+    TEST_ASSERT_FALSE(fb.begin());
     TEST_ASSERT_FALSE(fb.isConnected());
 }
 
-// ---------------------------------------------------------------------------
+void test_process_ack_marks_connected() {
+    FlipperBridge fb;
+    TEST_ASSERT_TRUE(fb.ping());
+    TEST_ASSERT_TRUE(fb.processIncomingForTest("{\"cmd\":240,\"payload\":{}}"));
+    TEST_ASSERT_TRUE(fb.isConnected());
+}
+
+void test_rejects_invalid_rf_payload() {
+    FlipperBridge fb;
+    TEST_ASSERT_FALSE(fb.rfTransmit("GG", 100));
+    TEST_ASSERT_NOT_EQUAL(std::string::npos, fb.lastError().find("Invalid RF"));
+}
+
+void test_rejects_oversized_custom_frame() {
+    FlipperBridge fb;
+    std::string payload = "{\"data\":\"" + std::string(600, 'a') + "\"}";
+    TEST_ASSERT_FALSE(fb.sendCustom(payload));
+}
+
+void test_malformed_incoming_frame_sets_error() {
+    FlipperBridge fb;
+    TEST_ASSERT_FALSE(fb.processIncomingForTest("not-json"));
+}
+
 int main(int argc, char** argv) {
     (void)argc; (void)argv;
     UNITY_BEGIN();
-    RUN_TEST(test_ping_sends_without_crash);
-    RUN_TEST(test_nfc_emulate_sends);
-    RUN_TEST(test_gpio_set_true);
-    RUN_TEST(test_gpio_set_false);
-    RUN_TEST(test_custom_send);
-    RUN_TEST(test_not_connected_initially);
+    RUN_TEST(test_begin_requires_ack);
+    RUN_TEST(test_process_ack_marks_connected);
+    RUN_TEST(test_rejects_invalid_rf_payload);
+    RUN_TEST(test_rejects_oversized_custom_frame);
+    RUN_TEST(test_malformed_incoming_frame_sets_error);
     return UNITY_END();
 }
