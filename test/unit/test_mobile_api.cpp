@@ -8,6 +8,7 @@
 #include "innovator/firmware_innovator.h"
 #include "mobile/mobile_api.h"
 #include "procedures/procedure_store.h"
+#include "radio/radio_measurement.h"
 
 void setUp(void) {}
 void tearDown(void) {}
@@ -19,7 +20,8 @@ void test_authentication_requires_bearer_token() {
     ProcedureStore store("/tmp/infiniteai-mobile-auth");
     Sandbox sandbox;
     FirmwareInnovator innovator(ai, cloud, store, sandbox);
-    MobileApi api(cloud, ai, flipper, store, innovator);
+    RadioMeasurement measurement;
+    MobileApi api(cloud, ai, flipper, store, innovator, measurement);
     const std::string valid = std::string("Bearer ") + API_AUTH_TOKEN;
     TEST_ASSERT_TRUE(api.authenticateForTest(valid));
     TEST_ASSERT_FALSE(api.authenticateForTest("******"));
@@ -32,7 +34,8 @@ void test_fragmented_body_reassembles_in_order() {
     ProcedureStore store("/tmp/infiniteai-mobile-frag");
     Sandbox sandbox;
     FirmwareInnovator innovator(ai, cloud, store, sandbox);
-    MobileApi api(cloud, ai, flipper, store, innovator);
+    RadioMeasurement measurement;
+    MobileApi api(cloud, ai, flipper, store, innovator, measurement);
 
     const std::string body = "{\"action\":\"ping\"}";
     auto first = api.accumulateBodyChunkForTest("req1", body.substr(0, 10), 0, body.size());
@@ -51,7 +54,8 @@ void test_fragmented_body_rejects_invalid_sequence() {
     ProcedureStore store("/tmp/infiniteai-mobile-invalid");
     Sandbox sandbox;
     FirmwareInnovator innovator(ai, cloud, store, sandbox);
-    MobileApi api(cloud, ai, flipper, store, innovator);
+    RadioMeasurement measurement;
+    MobileApi api(cloud, ai, flipper, store, innovator, measurement);
 
     auto result = api.accumulateBodyChunkForTest("req2", "{}", 1, 2);
     TEST_ASSERT_FALSE(result.accepted);

@@ -122,6 +122,10 @@ bool CloudManager::publishInnovatorResult(const std::string& jsonPayload) {
     return publish(MQTT_TOPIC_INNO, jsonPayload);
 }
 
+bool CloudManager::publishMeasurementResult(const std::string& jsonPayload) {
+    return publish(MQTT_TOPIC_MEASUREMENT, jsonPayload);
+}
+
 HttpResponse CloudManager::httpPost(const std::string& url,
                                     const std::string& bearerToken,
                                     const std::string& jsonBody) {

@@ -5,6 +5,7 @@ ESP32 control firmware that connects mobile/PC clients, MQTT/cloud services, and
 ## What this repository now implements
 
 - ESP32 firmware entrypoint with Wi-Fi, MQTT, HTTPS, OTA, BLE, REST, UART, and procedure persistence modules.
+- A radio measurement path that separates receiver sample intake from angle/scale estimation.
 - Cloud AI integration for **structured JSON advice**, not local model inference.
 - A **safe procedure-generation loop** that validates allowlisted actions and saves approved procedures.
 - Native unit tests plus GitHub Actions CI that runs:
@@ -36,6 +37,7 @@ src/
   innovator/    Sandbox + bounded innovation state machine
   mobile/       REST + BLE command surface
   procedures/   Persistent validated procedure storage
+  radio/        Receiver sample intake + measurement estimation
   main.cpp      ESP32 setup()/loop()
 ```
 
@@ -94,6 +96,9 @@ Authorization: ******
 | `GET` | `/procedures` | List saved validated procedures |
 | `POST` | `/innovate` | Queue a new innovation task |
 | `GET` | `/innovate/log` | Retrieve the bounded innovation log |
+| `GET` | `/measurement` | Fetch the current radio measurement state |
+| `POST` | `/measurement/start` | Start a receiver/estimation session |
+| `POST` | `/measurement/sample` | Submit a validated receiver sample |
 
 ### Request constraints
 
@@ -102,6 +107,35 @@ Authorization: ******
 - fragmented request bodies are reassembled using `index`/`total`
 - malformed or oversized bodies return structured errors
 - requests are rate limited
+
+### Radio measurement model
+
+The radio measurement path is intentionally split into:
+
+- a **receiver path** that accepts validated radio samples (`bearing_deg`, `rssi_dbm`, `distance_m`, `timestamp_ms`, `quality`)
+- an **estimation path** that derives angle-of-arrival/orientation readiness and near-10,000-gon scale checks from those samples
+
+Supported command actions across MQTT, BLE, and `/command` are:
+
+- `measurement_start`
+- `measurement_sample`
+- `measurement_status`
+- `measurement_reset`
+
+`measurement_start` accepts bounded calibration and validation inputs such as:
+
+- `mode`: `angle_of_arrival`, `orientation`, or `polygon_scale`
+- `frequency_hz`
+- `sample_window_ms`
+- `max_sample_age_ms`
+- `required_samples`
+- `calibration_offset_deg`
+- `repeatability_tolerance_deg`
+- `angle_tolerance_deg`
+- `target_sides`
+- `transmitter_active`
+
+If `transmitter_active` is requested, the command is treated like other dangerous RF actions and requires `confirm: true`.
 
 ### Dangerous commands
 

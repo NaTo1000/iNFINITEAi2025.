@@ -42,6 +42,7 @@ public:
     bool publishStatus(const std::string& jsonPayload);
     bool publishAiResult(const std::string& jsonPayload);
     bool publishInnovatorResult(const std::string& jsonPayload);
+    bool publishMeasurementResult(const std::string& jsonPayload);
     bool publish(const std::string& topic, const std::string& payload);
 
     HttpResponse httpPost(const std::string& url,

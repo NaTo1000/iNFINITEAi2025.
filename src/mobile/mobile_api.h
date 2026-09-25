@@ -15,6 +15,7 @@ class AiController;
 class FlipperBridge;
 class ProcedureStore;
 class FirmwareInnovator;
+class RadioMeasurement;
 
 using ApiCommandCallback = std::function<void(const std::string& jsonCommand)>;
 
@@ -24,7 +25,8 @@ public:
               AiController& ai,
               FlipperBridge& flipper,
               ProcedureStore& store,
-              FirmwareInnovator& innovator);
+              FirmwareInnovator& innovator,
+              RadioMeasurement& measurement);
 
     bool begin();
     void loop();
@@ -72,6 +74,7 @@ private:
     FlipperBridge& _flipper;
     ProcedureStore& _store;
     FirmwareInnovator& _innovator;
+    RadioMeasurement& _measurement;
     ApiCommandCallback _cmdCb;
     std::map<std::string, BufferedRequest> _requestBuffers;
     std::vector<uint32_t> _recentCallTimes;

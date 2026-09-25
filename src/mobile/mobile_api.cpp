@@ -7,6 +7,7 @@
 #include "../flipper/flipper_bridge.h"
 #include "../innovator/firmware_innovator.h"
 #include "../procedures/procedure_store.h"
+#include "../radio/radio_measurement.h"
 #include "../common/native_json.h"
 #include <algorithm>
 
@@ -41,8 +42,10 @@ MobileApi::MobileApi(CloudManager& cloud,
                      AiController& ai,
                      FlipperBridge& flipper,
                      ProcedureStore& store,
-                     FirmwareInnovator& innovator)
-    : _cloud(cloud), _ai(ai), _flipper(flipper), _store(store), _innovator(innovator) {
+                     FirmwareInnovator& innovator,
+                     RadioMeasurement& measurement)
+    : _cloud(cloud), _ai(ai), _flipper(flipper), _store(store),
+      _innovator(innovator), _measurement(measurement) {
 #ifndef NATIVE_TEST
     g_apiInstance = this;
 #endif
@@ -145,6 +148,8 @@ void MobileApi::_setupRoutes() {
         doc["flipper"] = _flipper.isConnected();
         doc["innovator_busy"] = _innovator.isBusy();
         doc["procedure_count"] = _store.count();
+        doc["measurement_active"] = _measurement.isActive();
+        doc["measurement_ready"] = _measurement.isReady();
         std::string body;
         serializeJson(doc, body);
         req->send(200, "application/json", body.c_str());
@@ -169,6 +174,14 @@ void MobileApi::_setupRoutes() {
         std::string body;
         serializeJson(doc, body);
         req->send(200, "application/json", body.c_str());
+    });
+
+    webServer.on("/measurement", HTTP_GET, [this](AsyncWebServerRequest* req) {
+        if (!_authenticate(req->header("Authorization").c_str())) {
+            req->send(401, "application/json", "{\"error\":\"unauthorized\"}");
+            return;
+        }
+        req->send(200, "application/json", _measurement.toJson().c_str());
     });
 
     webServer.on("/command", HTTP_POST,
@@ -243,6 +256,74 @@ void MobileApi::_setupRoutes() {
                 std::string respBody;
                 serializeJson(resp, respBody);
                 req->send(202, "application/json", respBody.c_str());
+            }
+        });
+
+    webServer.on("/measurement/start", HTTP_POST,
+        [](AsyncWebServerRequest*) {},
+        nullptr,
+        [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
+            if (!_authenticate(req->header("Authorization").c_str())) {
+                req->send(401, "application/json", "{\"error\":\"unauthorized\"}");
+                return;
+            }
+            if (!_rateLimitOk()) {
+                req->send(429, "application/json", "{\"error\":\"rate_limited\"}");
+                return;
+            }
+            std::string body;
+            std::string error;
+            if (!_appendBodyChunk(_requestKey(req), data, len, index, total, body, error)) {
+                req->send(413, "application/json", (std::string("{\"error\":\"") + error + "\"}").c_str());
+                return;
+            }
+            if (!body.empty()) {
+                JsonDocument doc;
+                if (deserializeJson(doc, body.c_str()) || !doc.is<JsonObject>()) {
+                    req->send(400, "application/json", "{\"error\":\"invalid_json\"}");
+                    return;
+                }
+                doc["action"] = "measurement_start";
+                std::string command;
+                serializeJson(doc, command);
+                if (_cmdCb) {
+                    _cmdCb(command);
+                }
+                req->send(202, "application/json", "{\"status\":\"queued\"}");
+            }
+        });
+
+    webServer.on("/measurement/sample", HTTP_POST,
+        [](AsyncWebServerRequest*) {},
+        nullptr,
+        [this](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t index, size_t total) {
+            if (!_authenticate(req->header("Authorization").c_str())) {
+                req->send(401, "application/json", "{\"error\":\"unauthorized\"}");
+                return;
+            }
+            if (!_rateLimitOk()) {
+                req->send(429, "application/json", "{\"error\":\"rate_limited\"}");
+                return;
+            }
+            std::string body;
+            std::string error;
+            if (!_appendBodyChunk(_requestKey(req), data, len, index, total, body, error)) {
+                req->send(413, "application/json", (std::string("{\"error\":\"") + error + "\"}").c_str());
+                return;
+            }
+            if (!body.empty()) {
+                JsonDocument doc;
+                if (deserializeJson(doc, body.c_str()) || !doc.is<JsonObject>()) {
+                    req->send(400, "application/json", "{\"error\":\"invalid_json\"}");
+                    return;
+                }
+                doc["action"] = "measurement_sample";
+                std::string command;
+                serializeJson(doc, command);
+                if (_cmdCb) {
+                    _cmdCb(command);
+                }
+                req->send(202, "application/json", "{\"status\":\"queued\"}");
             }
         });
 

@@ -69,6 +69,9 @@
 #ifndef MQTT_TOPIC_INNO
 #define MQTT_TOPIC_INNO          "infiniteai/innovator"
 #endif
+#ifndef MQTT_TOPIC_MEASUREMENT
+#define MQTT_TOPIC_MEASUREMENT   "infiniteai/measurement"
+#endif
 #ifndef MQTT_COMMAND_TOKEN
 #define MQTT_COMMAND_TOKEN       ""
 #endif
@@ -130,6 +133,15 @@
 #define FLIPPER_MIN_RF_HZ        300000000UL
 #define FLIPPER_MAX_RF_HZ        928000000UL
 #define FLIPPER_MAX_HEX_BYTES    256U
+
+// ---------------------------------------------------------------------------
+// Radio measurement receiver / estimation
+// ---------------------------------------------------------------------------
+#define RADIO_MEASURE_DEFAULT_FREQ_HZ        433920000UL
+#define RADIO_MEASURE_DEFAULT_WINDOW_MS      1500UL
+#define RADIO_MEASURE_DEFAULT_MAX_SAMPLE_AGE_MS 750UL
+#define RADIO_MEASURE_DEFAULT_REQUIRED_SAMPLES 4U
+#define RADIO_MEASURE_MAX_SAMPLES            32U
 
 // ---------------------------------------------------------------------------
 // BLE (used by both Flipper Zero BLE and mobile app)

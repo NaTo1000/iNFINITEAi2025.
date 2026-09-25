@@ -18,14 +18,16 @@
 #include "innovator/sandbox.h"
 #include "innovator/firmware_innovator.h"
 #include "procedures/procedure_store.h"
+#include "radio/radio_measurement.h"
 
 static CloudManager cloudMgr;
 static AiController aiCtrl(cloudMgr);
 static FlipperBridge flipper;
 static ProcedureStore procStore;
 static Sandbox sandbox;
+static RadioMeasurement measurement;
 static FirmwareInnovator innovator(aiCtrl, cloudMgr, procStore, sandbox);
-static MobileApi mobileApi(cloudMgr, aiCtrl, flipper, procStore, innovator);
+static MobileApi mobileApi(cloudMgr, aiCtrl, flipper, procStore, innovator, measurement);
 static std::vector<std::string> recentNonces;
 
 static bool isDangerousFlipperCmd(uint8_t cmd) {
@@ -74,6 +76,21 @@ static void publishJsonAi(const JsonDocument& doc) {
     cloudMgr.publishAiResult(payload);
 }
 
+static void publishMeasurementState() {
+    const std::string payload = measurement.toJson();
+    cloudMgr.publishMeasurementResult(payload);
+    mobileApi.notifyBle(payload);
+}
+
+static RadioMeasurementMode measurementModeFromDoc(const JsonDocument& doc) {
+    const std::string mode = doc["mode"] | "polygon_scale";
+    RadioMeasurementMode parsed = RadioMeasurementMode::POLYGON_SCALE;
+    if (!RadioMeasurement::parseMode(mode, parsed)) {
+        return RadioMeasurementMode::POLYGON_SCALE;
+    }
+    return parsed;
+}
+
 static void dispatchCommand(const std::string& topic, const std::string& payload) {
     JsonDocument cmdDoc;
     const DeserializationError parseErr = deserializeJson(cmdDoc, payload.c_str());
@@ -91,6 +108,7 @@ static void dispatchCommand(const std::string& topic, const std::string& payload
     const bool fromMqtt = topic == MQTT_TOPIC_CMD;
     const bool dangerous =
         strcmp(action, "reboot") == 0 ||
+        (strcmp(action, "measurement_start") == 0 && (cmdDoc["transmitter_active"] | false)) ||
         (strcmp(action, "flipper") == 0 && isDangerousFlipperCmd(cmdDoc["cmd"] | 0));
 
     if (fromMqtt) {
@@ -147,6 +165,48 @@ static void dispatchCommand(const std::string& topic, const std::string& payload
     }
     if (strcmp(action, "procedures") == 0) {
         cloudMgr.publishStatus(procStore.toJson());
+        return;
+    }
+    if (strcmp(action, "measurement_start") == 0) {
+        RadioMeasurementConfig config;
+        config.mode = measurementModeFromDoc(cmdDoc);
+        config.frequencyHz = cmdDoc["frequency_hz"] | RADIO_MEASURE_DEFAULT_FREQ_HZ;
+        config.sampleWindowMs = cmdDoc["sample_window_ms"] | RADIO_MEASURE_DEFAULT_WINDOW_MS;
+        config.maxSampleAgeMs = cmdDoc["max_sample_age_ms"] | RADIO_MEASURE_DEFAULT_MAX_SAMPLE_AGE_MS;
+        config.requiredSamples = cmdDoc["required_samples"] | RADIO_MEASURE_DEFAULT_REQUIRED_SAMPLES;
+        config.calibrationOffsetDeg = cmdDoc["calibration_offset_deg"] | 0.0f;
+        config.repeatabilityToleranceDeg = cmdDoc["repeatability_tolerance_deg"] | 0.5f;
+        config.angleToleranceDeg = cmdDoc["angle_tolerance_deg"] | 0.0f;
+        config.targetSides = cmdDoc["target_sides"] | 10000.0f;
+        config.transmitterActive = cmdDoc["transmitter_active"] | false;
+        std::string error;
+        if (!measurement.start(config, error)) {
+            ESP_LOGW(LOG_TAG_MAIN, "Rejected measurement start: %s", error.c_str());
+        }
+        publishMeasurementState();
+        return;
+    }
+    if (strcmp(action, "measurement_sample") == 0) {
+        RadioSignalSample sample;
+        sample.bearingDeg = cmdDoc["bearing_deg"] | -1.0f;
+        sample.rssiDbm = cmdDoc["rssi_dbm"] | -999;
+        sample.distanceMeters = cmdDoc["distance_m"] | 0.0f;
+        sample.timestampMs = cmdDoc["timestamp_ms"] | 0U;
+        sample.quality = cmdDoc["quality"] | 0U;
+        std::string error;
+        if (!measurement.ingestSample(sample, error)) {
+            ESP_LOGW(LOG_TAG_MAIN, "Rejected measurement sample: %s", error.c_str());
+        }
+        publishMeasurementState();
+        return;
+    }
+    if (strcmp(action, "measurement_status") == 0) {
+        publishMeasurementState();
+        return;
+    }
+    if (strcmp(action, "measurement_reset") == 0) {
+        measurement.reset();
+        publishMeasurementState();
         return;
     }
     if (strcmp(action, "reboot") == 0) {
