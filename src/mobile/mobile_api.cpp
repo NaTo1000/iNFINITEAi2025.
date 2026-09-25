@@ -316,7 +316,17 @@ bool MobileApi::_appendBodyChunk(const std::string& requestKey,
                                  std::string& completeBody,
                                  std::string& error) {
     completeBody.clear();
-    if (total == 0 || total > API_MAX_BODY_BYTES || index > total || index + len > total) {
+    if (total == 0 || total > API_MAX_BODY_BYTES || index > total) {
+        error = "body_too_large_or_invalid";
+        _clearRequestBuffer(requestKey);
+        return false;
+    }
+    auto existing = _requestBuffers.find(requestKey);
+    if (existing == _requestBuffers.end() && index != 0) {
+        error = "fragment_sequence_error";
+        return false;
+    }
+    if (index + len > total) {
         error = "body_too_large_or_invalid";
         _clearRequestBuffer(requestKey);
         return false;
