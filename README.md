@@ -6,7 +6,8 @@ ESP32 control firmware that connects mobile/PC clients, MQTT/cloud services, and
 
 - ESP32 firmware entrypoint with Wi-Fi, MQTT, HTTPS, OTA, BLE, REST, UART, and procedure persistence modules.
 - Cloud AI integration for **structured JSON advice**, not local model inference.
-- A **safe procedure-generation loop** that validates allowlisted actions and saves approved procedures.
+- An **evidence-driven ingestion and review loop** that normalizes evidence, applies QC thresholds, compares reviewer outputs, and saves audit-ready reports.
+- A **safe procedure-generation loop** that validates allowlisted actions and saves approved procedures only when the evidence-backed review passes QC.
 - Native unit tests plus GitHub Actions CI that runs:
   - `pio run -e esp32dev`
   - `pio run -e esp32dev_serial`
@@ -16,14 +17,17 @@ ESP32 control firmware that connects mobile/PC clients, MQTT/cloud services, and
 
 This project does **not** compile or execute arbitrary AI-generated C++ on-device.
 
-Instead, the innovator requests a structured JSON procedure containing only allowlisted actions:
+Instead, the innovator requests strict JSON containing:
+
+- a structured review report with source metadata, evidence, analysis, reviewer outputs, QC scores, and bounded recovery actions
+- a structured procedure containing only allowlisted actions:
 
 - `log`
 - `publish_status`
 - `wait_ms`
 - `request_review`
 
-A procedure must also include explicit validation criteria before it can be persisted. This means the current firmware supports **safe procedure generation and archival**, not autonomous firmware self-modification.
+A procedure must also include explicit validation criteria before it can be persisted, and the review report must meet explicit QC thresholds. This means the current firmware supports **bounded evidence review, safe procedure generation, and archival**, not autonomous firmware self-modification or open-ended investigative conclusions.
 
 ## Repository layout
 
@@ -91,9 +95,9 @@ Authorization: ******
 | `GET` | `/status` | Connectivity and device status |
 | `POST` | `/command` | Queue a validated control command |
 | `POST` | `/ai/query` | Send a direct structured AI request |
-| `GET` | `/procedures` | List saved validated procedures |
+| `GET` | `/procedures` | List saved validated procedures with audit sections |
 | `POST` | `/innovate` | Queue a new innovation task |
-| `GET` | `/innovate/log` | Retrieve the bounded innovation log |
+| `GET` | `/innovate/log` | Retrieve the bounded innovation log plus live review stage/report data |
 
 ### Request constraints
 
@@ -163,7 +167,7 @@ Physical NFC/RF/GPIO/IR actions can have legal or safety consequences. Only use 
 
 ## Procedure persistence
 
-Validated procedures are stored atomically and indexed under the procedure store.
+Validated evidence-review reports are stored atomically and indexed under the procedure store.
 
 Implemented safeguards:
 
@@ -173,6 +177,8 @@ Implemented safeguards:
 - procedure size/count limits
 - free-space checks
 - sanitized unique filenames
+
+Stored report summaries expose separate `evidence`, `analysis`, reviewer/QC, and `recommendedRecoveryActions` sections for auditability.
 
 ## OTA
 
