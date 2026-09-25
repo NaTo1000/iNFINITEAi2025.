@@ -165,7 +165,17 @@ void MobileApi::_setupRoutes() {
         }
         JsonDocument doc;
         doc["busy"] = _innovator.isBusy();
+        doc["stage"] = _innovator.currentStage().c_str();
+        doc["task"] = _innovator.currentTaskId().c_str();
+        doc["iterations"] = _innovator.currentIterations();
+        doc["summary"] = _innovator.lastStatusSummary().c_str();
         doc["log"] = _innovator.getLog().c_str();
+        if (!_innovator.lastReportJson().empty()) {
+            JsonDocument reportDoc;
+            if (!deserializeJson(reportDoc, _innovator.lastReportJson().c_str())) {
+                doc["report"] = reportDoc.as<JsonObject>();
+            }
+        }
         std::string body;
         serializeJson(doc, body);
         req->send(200, "application/json", body.c_str());

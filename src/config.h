@@ -151,6 +151,10 @@
 #define INNOVATOR_CYCLE_DELAY_MS       250UL
 #define INNOVATOR_MAX_LOG_BYTES        4096U
 #define INNOVATOR_MAX_STEP_DELAY_MS    5000U
+#define INNOVATOR_QC_PASS_SCORE        90U
+#define INNOVATOR_QC_MAX_RISK_SCORE    20U
+#define INNOVATOR_MIN_EVIDENCE_ITEMS   1U
+#define INNOVATOR_MIN_REVIEWERS        2U
 #define PROCEDURES_NAMESPACE           "procedures"
 
 // ---------------------------------------------------------------------------
@@ -158,7 +162,7 @@
 // ---------------------------------------------------------------------------
 #define PROCEDURE_MAX_COUNT            32U
 #define PROCEDURE_MAX_DESCRIPTION_BYTES 240U
-#define PROCEDURE_MAX_CODE_BYTES       2048U
+#define PROCEDURE_MAX_CODE_BYTES       6144U
 #define PROCEDURE_MIN_FREE_BYTES       8192U
 
 // ---------------------------------------------------------------------------

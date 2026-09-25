@@ -33,6 +33,43 @@ struct AiProcedurePlan {
     std::vector<std::string> validation;
 };
 
+struct AiEvidenceReference {
+    std::string id;
+    std::string type;
+    std::string source;
+    std::string detail;
+};
+
+struct AiReviewerOutput {
+    std::string model;
+    AiVerdict   verdict = AiVerdict::NONE;
+    uint32_t    confidence = 0;
+    std::string notes;
+};
+
+struct AiRecoveryAction {
+    std::string category;
+    std::string detail;
+};
+
+struct AiReviewReport {
+    std::string sourceType;
+    std::string sourceLabel;
+    std::string normalizedSummary;
+    uint32_t    qualityScore = 0;
+    uint32_t    confidenceScore = 0;
+    uint32_t    contradictionScore = 0;
+    uint32_t    deceptionScore = 0;
+    std::string qcDecision;
+    std::string recommendationSummary;
+    std::vector<AiEvidenceReference> evidence;
+    std::vector<std::string> verifiedFacts;
+    std::vector<std::string> unsupportedClaims;
+    std::vector<std::string> biasNotes;
+    std::vector<AiReviewerOutput> reviewers;
+    std::vector<AiRecoveryAction> recoveryActions;
+};
+
 struct AiRequest {
     std::string context;
     std::string systemRole;
@@ -45,6 +82,7 @@ struct AiResponse {
     std::string     reason;
     std::string     raw;
     AiProcedurePlan procedure;
+    AiReviewReport  report;
 };
 
 class AiController {
@@ -65,6 +103,7 @@ private:
     std::string _extractContent(const std::string& rawJson) const;
     AiResponse  _parseStructuredDecision(const std::string& content) const;
     bool        _sanitizeProcedure(AiProcedurePlan& procedure, std::string& reason) const;
+    bool        _sanitizeReport(AiReviewReport& report, AiVerdict verdict, std::string& reason) const;
     static AiVerdict _parseVerdict(const std::string& verdictText);
 
     CloudManager&       _cloud;

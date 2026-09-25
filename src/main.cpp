@@ -196,6 +196,13 @@ void setup() {
         doc["procedure"] = r.procedureName.c_str();
         doc["iterations"] = r.iterations;
         doc["log"] = r.log.c_str();
+        doc["qcDecision"] = r.qcDecision.c_str();
+        if (!r.reportJson.empty()) {
+            JsonDocument reportDoc;
+            if (!deserializeJson(reportDoc, r.reportJson.c_str())) {
+                doc["report"] = reportDoc.as<JsonObject>();
+            }
+        }
         std::string msg;
         serializeJson(doc, msg);
         cloudMgr.publishInnovatorResult(msg);

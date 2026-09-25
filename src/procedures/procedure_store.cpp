@@ -185,6 +185,33 @@ std::string ProcedureStore::toJson() const {
         obj["description"] = p.description.c_str();
         obj["timestamp"] = p.timestamp.c_str();
         obj["iteration"] = p.iteration;
+        JsonDocument reportDoc;
+        if (!deserializeJson(reportDoc, p.code.c_str())) {
+            if (reportDoc["source"].is<JsonObject>()) {
+                obj["source"] = reportDoc["source"];
+            }
+            if (reportDoc["evidence"].is<JsonArray>()) {
+                obj["evidence"] = reportDoc["evidence"];
+            }
+            if (reportDoc["analysis"].is<JsonObject>()) {
+                obj["analysis"] = reportDoc["analysis"];
+            }
+            if (reportDoc["reviewers"].is<JsonArray>()) {
+                obj["reviewers"] = reportDoc["reviewers"];
+            }
+            if (reportDoc["scores"].is<JsonObject>()) {
+                obj["scores"] = reportDoc["scores"];
+            }
+            if (reportDoc["qcDecision"].is<const char*>()) {
+                obj["qcDecision"] = reportDoc["qcDecision"];
+            }
+            if (reportDoc["recommendedRecoveryActions"].is<JsonArray>()) {
+                obj["recommendedRecoveryActions"] = reportDoc["recommendedRecoveryActions"];
+            }
+            if (reportDoc["recommendationSummary"].is<const char*>()) {
+                obj["recommendationSummary"] = reportDoc["recommendationSummary"];
+            }
+        }
     }
     std::string out;
     serializeJson(doc, out);
@@ -196,7 +223,35 @@ std::string ProcedureStore::toJson() const {
         out += "{\"name\":\"" + nativejson::escapeString(_cache[i].name) +
                "\",\"description\":\"" + nativejson::escapeString(_cache[i].description) +
                "\",\"timestamp\":\"" + nativejson::escapeString(_cache[i].timestamp) +
-               "\",\"iteration\":" + std::to_string(_cache[i].iteration) + "}";
+               "\",\"iteration\":" + std::to_string(_cache[i].iteration);
+        std::string sectionJson;
+        if (nativejson::extractObjectField(_cache[i].code, "source", sectionJson)) {
+            out += ",\"source\":" + sectionJson;
+        }
+        if (nativejson::extractArrayField(_cache[i].code, "evidence", sectionJson)) {
+            out += ",\"evidence\":" + sectionJson;
+        }
+        if (nativejson::extractObjectField(_cache[i].code, "analysis", sectionJson)) {
+            out += ",\"analysis\":" + sectionJson;
+        }
+        if (nativejson::extractArrayField(_cache[i].code, "reviewers", sectionJson)) {
+            out += ",\"reviewers\":" + sectionJson;
+        }
+        if (nativejson::extractObjectField(_cache[i].code, "scores", sectionJson)) {
+            out += ",\"scores\":" + sectionJson;
+        }
+        std::string qcDecision;
+        if (nativejson::extractStringField(_cache[i].code, "qcDecision", qcDecision)) {
+            out += ",\"qcDecision\":\"" + nativejson::escapeString(qcDecision) + "\"";
+        }
+        if (nativejson::extractArrayField(_cache[i].code, "recommendedRecoveryActions", sectionJson)) {
+            out += ",\"recommendedRecoveryActions\":" + sectionJson;
+        }
+        std::string recommendationSummary;
+        if (nativejson::extractStringField(_cache[i].code, "recommendationSummary", recommendationSummary)) {
+            out += ",\"recommendationSummary\":\"" + nativejson::escapeString(recommendationSummary) + "\"";
+        }
+        out += "}";
     }
     out += "]}";
     return out;

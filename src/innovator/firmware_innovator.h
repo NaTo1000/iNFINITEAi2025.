@@ -26,6 +26,8 @@ struct InnovationResult {
     std::string procedureName;
     std::string finalSolution;
     std::string log;
+    std::string reportJson;
+    std::string qcDecision;
 };
 
 using InnovationCompleteCallback = std::function<void(const InnovationResult& result)>;
@@ -43,6 +45,11 @@ public:
     void onComplete(InnovationCompleteCallback cb) { _completeCb = cb; }
     bool isBusy() const { return _busy; }
     const std::string& getLog() const { return _log; }
+    std::string currentStage() const;
+    std::string currentTaskId() const { return _currentTask.id; }
+    uint32_t currentIterations() const { return _currentResult.iterations; }
+    const std::string& lastReportJson() const { return _lastReportJson; }
+    const std::string& lastStatusSummary() const { return _lastStatusSummary; }
 
 private:
     enum class Phase : uint8_t {
@@ -56,8 +63,13 @@ private:
     void _finishTask(bool passed, bool cancelled, const std::string& reason);
     void _appendLogLine(const std::string& line);
     void _publishResult(const InnovationResult& result);
+    void _publishLiveStatus(const std::string& state, const std::string& summary);
     std::string _serializeProcedure(const AiProcedurePlan& procedure) const;
+    std::string _serializeReviewReport(const AiReviewReport& report,
+                                       const std::string& finalDecision) const;
     std::string _buildValidationSummary(const AiProcedurePlan& procedure) const;
+    std::string _buildEvaluationContext(const AiResponse& diagnosis,
+                                        const std::string& validationSummary) const;
     uint32_t _nowMs() const;
 
     AiController&   _ai;
@@ -72,6 +84,8 @@ private:
     AiResponse        _diagnosis;
     std::string       _errorContext;
     std::string       _sandboxSummary;
+    std::string       _lastReportJson;
+    std::string       _lastStatusSummary;
     std::string       _log;
     Phase             _phase = Phase::IDLE;
     bool              _busy = false;
