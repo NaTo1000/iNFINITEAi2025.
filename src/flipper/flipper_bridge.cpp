@@ -265,6 +265,10 @@ FlipperPacket FlipperBridge::_jsonToPacket(const std::string& json) const {
     }
 #else
     uint32_t cmdValue = static_cast<uint32_t>(FlipperCmd::NACK);
+    // Reject non-object frames before native field defaults can hide bad input.
+    if (!nativejson::looksLikeJsonObject(json)) {
+        return pkt;
+    }
     nativejson::extractUIntField(json, "cmd", cmdValue);
     pkt.cmd = static_cast<FlipperCmd>(cmdValue);
     std::string payloadJson;

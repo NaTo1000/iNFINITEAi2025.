@@ -34,6 +34,10 @@ void test_rejects_oversized_custom_frame() {
 void test_malformed_incoming_frame_sets_error() {
     FlipperBridge fb;
     TEST_ASSERT_FALSE(fb.processIncomingForTest("not-json"));
+    TEST_ASSERT_NOT_EQUAL(std::string::npos, fb.lastError().find("malformed"));
+    TEST_ASSERT_FALSE(fb.processIncomingForTest("[]"));
+    TEST_ASSERT_FALSE(fb.processIncomingForTest("{\"cmd\":240"));
+    TEST_ASSERT_FALSE(fb.isConnected());
 }
 
 int main(int argc, char** argv) {

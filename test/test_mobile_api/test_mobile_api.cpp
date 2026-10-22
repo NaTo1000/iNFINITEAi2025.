@@ -53,9 +53,17 @@ void test_fragmented_body_rejects_invalid_sequence() {
     FirmwareInnovator innovator(ai, cloud, store, sandbox);
     MobileApi api(cloud, ai, flipper, store, innovator);
 
-    auto result = api.accumulateBodyChunkForTest("req2", "{}", 1, 2);
+    // Stay within bounds so this exercises the missing initial fragment.
+    auto result = api.accumulateBodyChunkForTest("req2", "}", 1, 2);
     TEST_ASSERT_FALSE(result.accepted);
     TEST_ASSERT_NOT_EQUAL(std::string::npos, result.error.find("sequence"));
+    auto oversized = api.accumulateBodyChunkForTest("req2", "{}", 1, 2);
+    TEST_ASSERT_FALSE(oversized.accepted);
+    TEST_ASSERT_EQUAL_STRING("body_too_large_or_invalid", oversized.error.c_str());
+    auto recovery = api.accumulateBodyChunkForTest("req2", "{}", 0, 2);
+    TEST_ASSERT_TRUE(recovery.accepted);
+    TEST_ASSERT_TRUE(recovery.complete);
+    TEST_ASSERT_EQUAL_STRING("{}", recovery.body.c_str());
 }
 
 int main(int argc, char** argv) {
