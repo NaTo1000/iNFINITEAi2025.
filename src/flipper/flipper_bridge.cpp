@@ -8,9 +8,10 @@
 #ifndef NATIVE_TEST
 #include <Arduino.h>
 #include <ArduinoJson.h>
-#include <SoftwareSerial.h>
+#include <HardwareSerial.h>
 #include <esp_log.h>
-static SoftwareSerial flipperSerial(FLIPPER_UART_RX, FLIPPER_UART_TX);
+// ESP32 UART2 is dedicated to the bridge; UART0 remains available for logging.
+static HardwareSerial& flipperSerial = Serial2;
 #else
 #include <cstdio>
 #include <thread>
@@ -23,7 +24,7 @@ FlipperBridge::FlipperBridge() = default;
 
 bool FlipperBridge::begin() {
 #ifndef NATIVE_TEST
-    flipperSerial.begin(FLIPPER_BAUD);
+    flipperSerial.begin(FLIPPER_BAUD, SERIAL_8N1, FLIPPER_UART_RX, FLIPPER_UART_TX);
     ESP_LOGI(LOG_TAG_FLIPPER, "UART bridge ready (RX=%d TX=%d baud=%d)",
              FLIPPER_UART_RX, FLIPPER_UART_TX, FLIPPER_BAUD);
 #endif

@@ -60,6 +60,11 @@ If credentials are missing, the firmware falls back to provisioning/AP behavior 
 
 ## Build and test
 
+The `esp32dev` targets reserve hardware UART2 (`Serial2`) for the Flipper bridge,
+using `FLIPPER_UART_RX`/`FLIPPER_UART_TX` (defaults 16/17), `FLIPPER_BAUD`, and 8N1
+framing. UART0 remains available for logging. Do not assign UART2 to another
+peripheral. Builds and native mocks do not validate physical UART wiring or timing.
+
 ### Local PlatformIO commands
 
 ```bash
