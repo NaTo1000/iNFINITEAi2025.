@@ -65,6 +65,11 @@ using `FLIPPER_UART_RX`/`FLIPPER_UART_TX` (defaults 16/17), `FLIPPER_BAUD`, and 
 framing. UART0 remains available for logging. Do not assign UART2 to another
 peripheral. Builds and native mocks do not validate physical UART wiring or timing.
 
+The mobile BLE interface is a peripheral/server that advertises its service.
+Both ESP32 builds omit NimBLE's unused central/client and observer/scanning roles
+to reduce firmware size. If adding BLE client or scan features, re-enable those
+roles and recheck both application images against the OTA slot size.
+
 ### Local PlatformIO commands
 
 ```bash
