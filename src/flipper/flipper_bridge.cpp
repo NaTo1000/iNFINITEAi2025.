@@ -4,16 +4,17 @@
 #include "flipper_bridge.h"
 #include "../common/native_json.h"
 #include <cctype>
+#include <ArduinoJson.h>
 
 #ifndef NATIVE_TEST
 #include <Arduino.h>
-#include <ArduinoJson.h>
 #include <HardwareSerial.h>
 #include <esp_log.h>
 // ESP32 UART2 is dedicated to the bridge; UART0 remains available for logging.
 static HardwareSerial& flipperSerial = Serial2;
 #else
 #include <cstdio>
+#include <sstream>
 #include <thread>
 #define ESP_LOGI(tag, fmt, ...) printf("[" tag "] " fmt "\n", ##__VA_ARGS__)
 #define ESP_LOGE(tag, fmt, ...) printf("[" tag "][ERR] " fmt "\n", ##__VA_ARGS__)
@@ -265,18 +266,22 @@ FlipperPacket FlipperBridge::_jsonToPacket(const std::string& json) const {
         pkt.payload = doc["payload"] | "{}";
     }
 #else
-    uint32_t cmdValue = static_cast<uint32_t>(FlipperCmd::NACK);
-    // Reject non-object frames before native field defaults can hide bad input.
-    if (!nativejson::looksLikeJsonObject(json)) {
+    // Use the firmware parser so native tests reject malformed object envelopes.
+    JsonDocument doc;
+    std::istringstream input(json);
+    if (deserializeJson(doc, input) || !doc.is<JsonObject>()) {
         return pkt;
     }
-    nativejson::extractUIntField(json, "cmd", cmdValue);
-    pkt.cmd = static_cast<FlipperCmd>(cmdValue);
-    std::string payloadJson;
-    if (nativejson::extractObjectField(json, "payload", payloadJson)) {
-        pkt.payload = payloadJson;
+    // A line is one envelope; the parser may stop after the first object.
+    input >> std::ws;
+    if (!input.eof()) {
+        return pkt;
+    }
+    pkt.cmd = static_cast<FlipperCmd>(doc["cmd"] | static_cast<uint8_t>(FlipperCmd::NACK));
+    if (doc["payload"].is<JsonObject>()) {
+        serializeJson(doc["payload"], pkt.payload);
     } else {
-        pkt.payload = "{}";
+        pkt.payload = doc["payload"] | "{}";
     }
 #endif
     return pkt;
