@@ -198,6 +198,13 @@ Current limitations:
 
 Native tests cover parser, persistence, Flipper framing, mobile body buffering, and innovation state transitions.
 
+Native Flipper envelope decoding uses ArduinoJson 7.4.3 (the version used in
+the validated ESP32 build), rather than extracting fields from brace-shaped
+text. Native input must contain one object followed only by whitespace; malformed
+objects and extra trailing content are rejected before connection state changes.
+This does not replace the other lightweight native JSON helpers or establish
+complete native/device parser equivalence. Device envelope decoding is unchanged.
+
 Hardware-specific behavior still needs on-device verification for:
 
 - Wi-Fi association and provisioning AP
