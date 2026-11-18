@@ -35,7 +35,7 @@ public:
     void loop();
 
     bool isWiFiConnected() const;
-    bool isMqttConnected() const;
+    bool isMqttConnected();
     bool credentialsProvisioned() const;
     bool hasTrustedTlsConfig() const;
 
