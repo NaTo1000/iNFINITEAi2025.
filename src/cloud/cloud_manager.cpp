@@ -76,7 +76,7 @@ bool CloudManager::isWiFiConnected() const {
 #endif
 }
 
-bool CloudManager::isMqttConnected() const {
+bool CloudManager::isMqttConnected() {
 #ifdef NATIVE_TEST
     return _mockMqttConnected;
 #else
@@ -150,6 +150,7 @@ HttpResponse CloudManager::httpPost(const std::string& url,
         return response;
     }
 
+    std::vector<uint8_t> requestBody(jsonBody.begin(), jsonBody.end());
     for (uint8_t attempt = 1; attempt <= HTTP_RETRY_COUNT; ++attempt) {
         WiFiClientSecure client;
         if (!_configureSecureClient(client)) {
@@ -171,7 +172,7 @@ HttpResponse CloudManager::httpPost(const std::string& url,
             http.addHeader("Authorization", ("Bearer " + bearerToken).c_str());
         }
 
-        const int statusCode = http.POST(reinterpret_cast<const uint8_t*>(jsonBody.data()), jsonBody.size());
+        const int statusCode = http.POST(requestBody.data(), requestBody.size());
         response.attempts = attempt;
         response.statusCode = statusCode;
         if (statusCode > 0) {
